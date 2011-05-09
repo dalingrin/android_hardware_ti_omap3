@@ -43,8 +43,8 @@
 #define NUM_BUFFERS_TO_BE_QUEUED_FOR_OPTIMAL_PERFORMANCE    3
 #define NUM_OVERLAY_BUFFERS_REQUESTED  (6)
 /* These values should come from Surface Flinger */
-#define LCD_WIDTH 800
-#define LCD_HEIGHT 480
+#define LCD_WIDTH 1024
+#define LCD_HEIGHT 600
 #define TV_WIDTH 720
 #define TV_HEIGHT 480
 #define MAX_NUM_OVERLAYS 2

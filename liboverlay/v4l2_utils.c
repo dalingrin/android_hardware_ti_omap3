@@ -25,7 +25,8 @@
 #include <errno.h>
 #include <cutils/log.h>
 #include <hardware/overlay.h>
-#include <linux/videodev.h>
+//#include <linux/videodev.h>
+#include "videodev.h"
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <stdlib.h>
@@ -209,6 +210,7 @@ int configure_pixfmt(struct v4l2_pix_format *pix, int32_t fmt,
     case OVERLAY_FORMAT_CbYCrY_422_I:
         pix->pixelformat = V4L2_PIX_FMT_UYVY;
         break;
+#ifdef TARGET_OMAP4
     case OVERLAY_FORMAT_YCbCr_420_SP_SEQ_TB:
         /* NV12 Interlaced (Sequential Top-Bottom).
            Just update pix.field, and  NV12 params */
@@ -216,6 +218,7 @@ int configure_pixfmt(struct v4l2_pix_format *pix, int32_t fmt,
         pix->pixelformat = V4L2_PIX_FMT_NV12;
         pix->bytesperline = 4096;
         break;
+#endif
     case OVERLAY_FORMAT_YCbCr_420_SP:
         pix->pixelformat = V4L2_PIX_FMT_NV12;
         pix->bytesperline = 4096;
@@ -312,7 +315,10 @@ int v4l2_overlay_get_input_size_and_format(int fd, uint32_t *w, uint32_t *h, uin
 int v4l2_overlay_set_position(int fd, int32_t x, int32_t y, int32_t w, int32_t h)
 {
     LOG_FUNCTION_NAME
-
+/*
+    int32_t temp = x;
+    x = y;
+    y = temp;*/
     struct v4l2_format format;
     int ret;
 
@@ -331,6 +337,7 @@ int v4l2_overlay_set_position(int fd, int32_t x, int32_t y, int32_t w, int32_t h
         x = 0;
         y = 0;
     }
+    
     configure_window(&format.fmt.win, w, h, x, y);
 
     format.type = V4L2_BUF_TYPE_VIDEO_OVERLAY;
@@ -505,7 +512,7 @@ int v4l2_overlay_set_colorkey(int fd, int enable, int colorkey, int keyType)
 
     return ret;
 }
-
+#ifdef TARGET_OMAP4
 int v4l2_overlay_set_zorder(int fd, int value)
 {
     LOG_FUNCTION_NAME
@@ -536,7 +543,7 @@ int v4l2_overlay_get_zorder(int fd, int* value)
     *value = fmt.fmt.win.zorder;
     return ret;
 }
-
+#endif
 int v4l2_overlay_set_global_alpha(int fd, int enable, int alpha)
 {
     LOG_FUNCTION_NAME

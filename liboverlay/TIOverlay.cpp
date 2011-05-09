@@ -34,7 +34,8 @@ extern "C" {
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <unistd.h>
-#include <linux/videodev.h>
+//#include <linux/videodev.h>
+#include "videodev.h"
 
 #include <cutils/log.h>
 #include <cutils/ashmem.h>
@@ -352,6 +353,8 @@ void overlay_control_context_t::calculateWindow(overlay_object *overlayobj, over
             case 270:
                 finalWindow->posW = data->posH;
                 finalWindow->posH = data->posW;
+                finalWindow->posX = data->posY;
+                finalWindow->posY = data->posX;
                 break;
             case 180:
             default: // 0
@@ -899,15 +902,15 @@ overlay_t* overlay_control_context_t::overlay_createOverlay(struct overlay_contr
             LOGD("No zOrder is available\n");
             goto error1;
         }
-
+#ifdef TARGET_OMAP4
         self->mZorderUsage[overlayid] = maxZorder+1;
         if (v4l2_overlay_set_zorder(fd, maxZorder+1)) {
             LOGE("Failed setting zorder\n");
             goto error1;
         }
         LOGD("mZorderUsage[%d] is assigned to %d", overlayid, self->mZorderUsage[overlayid]);
+#endif
     }
-
     if (v4l2_overlay_req_buf(fd, &num, 0, 0, EMEMORY_MMAP)) {
         LOGE("Failed requesting buffers\n");
         goto error1;
@@ -1071,11 +1074,12 @@ void overlay_control_context_t::overlay_destroyOverlay(struct overlay_control_de
                 self->mZorderUsage[i] -= 1;
                 overlay_object *overlayobj = static_cast<overlay_object *>(self->mOmapOverlays[i]);
                 int fd = overlayobj->getctrl_videofd();
-
+#ifdef TARGET_OMAP4
                 if (v4l2_overlay_set_zorder(fd, self->mZorderUsage[i])) {
                     LOGE("Failed setting zorder\n");
                     //There is nothing to do if failed
                 }
+#endif
             }
         }
     }
@@ -1168,15 +1172,16 @@ int overlay_control_context_t::overlay_setPosition(struct overlay_control_device
                 self->mZorderUsage[i] -= 1;
                 overlay_object *overlayobj_selected = static_cast<overlay_object *>(self->mOmapOverlays[i]);
                 int fdd = overlayobj_selected->getctrl_videofd();
-
+#ifdef TARGET_OMAP4
                 if (v4l2_overlay_set_zorder(fdd, self->mZorderUsage[i])) {
                     LOGE("Failed setting zorder\n");
                     //there is nothing to do if failed
                 }
+#endif
            }
         }
     }
-
+#ifdef TARGET_OMAP4
     if( maxZorder != targetedZorder ) {
         self->mZorderUsage[targetedOverlay] = maxZorder;
         if (v4l2_overlay_set_zorder(fd, maxZorder)) {
@@ -1184,7 +1189,7 @@ int overlay_control_context_t::overlay_setPosition(struct overlay_control_device
             //there is nothing to do if failed
         }
     }
-
+#endif
 END:
     LOG_FUNCTION_NAME_EXIT;
     return rc;
@@ -2469,17 +2474,20 @@ static int overlay_device_open(const struct hw_module_t* module,
 
         dev->get = overlay_control_context_t::overlay_get;
         dev->createOverlay = overlay_control_context_t::overlay_createOverlay;
+#ifdef TARGET_OMAP4
         //S3D
         dev->createOverlay_S3D = overlay_control_context_t::overlay_createOverlay;
+#endif
         dev->destroyOverlay = overlay_control_context_t::overlay_destroyOverlay;
         dev->setPosition = overlay_control_context_t::overlay_setPosition;
         dev->getPosition = overlay_control_context_t::overlay_getPosition;
         dev->setParameter = overlay_control_context_t::overlay_setParameter;
         dev->stage = overlay_control_context_t::overlay_stage;
         dev->commit = overlay_control_context_t::overlay_commit;
+#ifdef TARGET_OMAP4
         //clone
         dev->requestOverlayClone = overlay_control_context_t::overlay_requestOverlayClone;
-
+#endif
         *device = &dev->common;
         for (int i = 0; i < MAX_NUM_OVERLAYS; i++)
         {
@@ -2515,9 +2523,10 @@ static int overlay_device_open(const struct hw_module_t* module,
         dev->queueBuffer = overlay_data_context_t::overlay_queueBuffer;
         dev->getBufferAddress = overlay_data_context_t::overlay_getBufferAddress;
         dev->getBufferCount = overlay_data_context_t::overlay_getBufferCount;
+#ifdef TARGET_OMAP4
         //S3D
         dev->set_s3d_params = overlay_data_context_t::overlay_set_s3d_params;
-
+#endif
         *device = &dev->common;
          status = 0;
     }else {
