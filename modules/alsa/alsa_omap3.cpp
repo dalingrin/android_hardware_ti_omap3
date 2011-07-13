@@ -28,6 +28,7 @@
 
 #define BLUETOOTH_SCO_DEVICE "hw:0,2"
 #define FM_TRANSMIT_DEVICE "hw:0,3"
+#define EXT_USB_DEVICE "hw:1,0"
 
 #ifndef ALSA_DEFAULT_SAMPLE_RATE
 #define ALSA_DEFAULT_SAMPLE_RATE 44100 // in Hz
@@ -203,9 +204,9 @@ static alsa_handle_t _defaults[] = {
         handle      : 0,
         format      : SND_PCM_FORMAT_S16_LE, // AudioSystem::PCM_16_BIT
         channels    : 1,
-        sampleRate  : AudioRecord::DEFAULT_SAMPLE_RATE,
+        sampleRate  : /*AudioRecord::*/DEFAULT_SAMPLE_RATE,
         latency     : 250000, // Desired Delay in usec
-        bufferSize  : 2048, // Desired Number of samples
+        bufferSize  : 8192, //DEFAULT_SAMPLE_RATE / 6, // Desired Number of samples
         mmap        : 0,
         modPrivate  : (void *)&setDefaultControls,
     },
@@ -221,11 +222,17 @@ const char *deviceName(alsa_handle_t *handle, uint32_t device, int mode)
     if (device & OMAP3_OUT_FM)
         return FM_TRANSMIT_DEVICE;
 
+    /* Let's see if this is external device match attempt first */
+    if (device & AudioSystem::DEVICE_OUT_WIRED_HEADSET ||
+	device & AudioSystem::DEVICE_IN_WIRED_HEADSET)
+	return EXT_USB_DEVICE;
+
     return "default";
 }
 
 snd_pcm_stream_t direction(alsa_handle_t *handle)
 {
+LOGE("direction requext. devices %d, mask %d,  result %d\n", handle->devices, AudioSystem::DEVICE_OUT_ALL, handle->devices & AudioSystem::DEVICE_OUT_ALL);
     return (handle->devices & AudioSystem::DEVICE_OUT_ALL) ? SND_PCM_STREAM_PLAYBACK
             : SND_PCM_STREAM_CAPTURE;
 }
@@ -255,6 +262,7 @@ status_t setHardwareParams(alsa_handle_t *handle)
     const char *formatName = validFormat ? snd_pcm_format_name(handle->format)
             : "UNKNOWN";
 
+#if 0
     if (direction(handle)==SND_PCM_STREAM_PLAYBACK) {
         /* For playback, configure ALSA use our "standard" period size */
         periodSizeScaleFactor = 4;
@@ -263,6 +271,9 @@ status_t setHardwareParams(alsa_handle_t *handle)
            to better match AudioFlinger client expected size. */
         periodSizeScaleFactor = 2;
     }
+#else
+	periodSizeScaleFactor = 4;
+#endif
 
     if (snd_pcm_hw_params_malloc(&hardwareParams) < 0) {
         LOG_ALWAYS_FATAL("Failed to allocate ALSA hardware parameters!");
@@ -292,7 +303,7 @@ status_t setHardwareParams(alsa_handle_t *handle)
         goto done;
     }
 
-    LOGV("Set %s PCM format to %s (%s)", streamName(handle), formatName, formatDesc);
+    LOGI("Set %s PCM format to %s (%s)", streamName(handle), formatName, formatDesc);
 
     err = snd_pcm_hw_params_set_channels(handle->handle, hardwareParams,
             handle->channels);
@@ -302,7 +313,7 @@ status_t setHardwareParams(alsa_handle_t *handle)
         goto done;
     }
 
-    LOGV("Using %i %s for %s.", handle->channels,
+    LOGI("Using %i %s for %s.", handle->channels,
             handle->channels == 1 ? "channel" : "channels", streamName(handle));
 
     err = snd_pcm_hw_params_set_rate_near(handle->handle, hardwareParams,
@@ -318,7 +329,7 @@ status_t setHardwareParams(alsa_handle_t *handle)
         LOGW("Requested rate (%u HZ) does not match actual rate (%u HZ)",
                 handle->sampleRate, requestedRate);
     else
-        LOGV("Set %s sample rate to %u HZ", streamName(handle), requestedRate);
+        LOGI("Set %s sample rate to %u HZ", streamName(handle), requestedRate);
 
     // Make sure we have at least the size we originally wanted
 
@@ -380,8 +391,8 @@ status_t setHardwareParams(alsa_handle_t *handle)
         }
     }
 
-    LOGV("Buffer size: %d", (int)bufferSize);
-    LOGV("Latency: %d", (int)latency);
+    LOGI("Buffer size: %d", (int)bufferSize);
+    LOGI("Latency: %d", (int)latency);
 
     handle->bufferSize = bufferSize;
     handle->latency = latency;
@@ -578,6 +589,12 @@ static status_t s_open(alsa_handle_t *handle, uint32_t devices, int mode)
     //
     s_close(handle);
 
+    // We start by requiring USB headset, we'll retry if it does not work
+    // hackity-hack...
+    devices |= mode ? AudioSystem::DEVICE_IN_WIRED_HEADSET :\
+                      AudioSystem::DEVICE_OUT_WIRED_HEADSET;
+
+open_again:
     LOGD("open called for devices %08x in mode %d...", devices, mode);
 
     const char *stream = streamName(handle);
@@ -589,7 +606,13 @@ static status_t s_open(alsa_handle_t *handle, uint32_t devices, int mode)
     int err = snd_pcm_open(&handle->handle, devName, direction(handle), 0);
 
     if (err < 0) {
-        LOGE("Failed to Initialize any ALSA %s device: %s", stream, snd_strerror(err));
+	if (devices & (AudioSystem::DEVICE_OUT_WIRED_HEADSET |
+		       AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
+		devices &= ~(AudioSystem::DEVICE_IN_WIRED_HEADSET |
+			     AudioSystem::DEVICE_OUT_WIRED_HEADSET);
+		goto open_again;
+	}
+        LOGE("Failed to Initialize any ALSA %s %s device: %s", stream, devName, snd_strerror(err));
         return NO_INIT;
     }
 
